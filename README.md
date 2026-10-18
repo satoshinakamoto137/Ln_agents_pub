@@ -1,51 +1,51 @@
-# 🤖 LinkedinBot — Easy Apply con visión por computadora + HID físico
+# 🤖 LinkedinBot: Easy Apply with computer vision + a physical HID
 
-Bot que automatiza postulaciones **Easy Apply** de LinkedIn sin tocar el DOM del navegador:
-**ve** la pantalla con OpenCV + OCR, **piensa** con un LLM local (Ollama) y **actúa** mediante un
-**Arduino que se presenta como teclado y mouse USB reales**.
+A bot that automates LinkedIn **Easy Apply** applications without touching the browser DOM.
+It **sees** the screen with OpenCV + OCR, **thinks** with a local LLM (Ollama) and **acts** through an
+**Arduino that shows up as a real USB keyboard and mouse**.
 
-> ⚠️ **Proyecto educativo / de portafolio.** Automatizar LinkedIn va contra sus
-> [Términos de Servicio](https://www.linkedin.com/legal/user-agreement) y puede terminar en la
-> suspensión de tu cuenta. Úsalo bajo tu propio riesgo y revisa siempre lo que el bot responde en tu nombre.
+> ⚠️ **Educational / portfolio project.** Automating LinkedIn violates its
+> [User Agreement](https://www.linkedin.com/legal/user-agreement) and may get your account suspended.
+> Use it at your own risk, and always review what the bot answers on your behalf.
 
 ---
 
-## 📑 Contenido
+## 📑 Contents
 
-- [✨ Características](#-características)
-- [🧱 Arquitectura](#-arquitectura)
-- [🔄 Flujo de una postulación](#-flujo-de-una-postulación)
-- [🧩 Módulos](#-módulos)
+- [✨ Features](#-features)
+- [🧱 Architecture](#-architecture)
+- [🔄 Application flow](#-application-flow)
+- [🧩 Modules](#-modules)
 - [🔌 Hardware: Arduino HID](#-hardware-arduino-hid)
-- [🧠 Mei: el solver de preguntas](#-mei-el-solver-de-preguntas)
-- [🎲 Comportamiento humano](#-comportamiento-humano)
-- [🛠️ Instalación](#️-instalación)
-- [🚀 Uso](#-uso)
-- [📁 Estructura del repo](#-estructura-del-repo)
-- [🚧 Limitaciones y TODO](#-limitaciones-y-todo)
+- [🧠 Mei: the question solver](#-mei-the-question-solver)
+- [🎲 Human-like behavior](#-human-like-behavior)
+- [🛠️ Installation](#️-installation)
+- [🚀 Usage](#-usage)
+- [📁 Repo layout](#-repo-layout)
+- [🚧 Limitations and TODO](#-limitations-and-todo)
 
 ---
 
-## ✨ Características
+## ✨ Features
 
-- 👁️ **Detección visual de la UI** por *template matching* (OpenCV) contra recortes PNG de botones y campos.
-- 🔤 **OCR bilingüe** (EasyOCR `en` + `es`, Tesseract como alternativa) para leer las preguntas y opciones.
-- 🧠 **LLM local** (Ollama, `gpt-oss:20b`) expuesto como API Flask que responde en JSON.
-- ⌨️🖱️ **Entrada por hardware**: un Arduino (ATmega32U4) recibe comandos por serial y los ejecuta como HID USB.
-- 🎲 **Tiempos humanos**: retardos log-normales/gaussianos, trayectorias Bézier del mouse y tecleo carácter a carácter.
-- 🗓️ **Motor de eventos**: lanza postulaciones espaciadas aleatoriamente, cada una en un proceso Python aislado con timeout.
-- 📸 **Evidencia**: guarda una captura de cada formulario antes de enviarlo (`records/`) y logs por sesión (`logs/`).
+- 👁️ **Visual UI detection** using *template matching* (OpenCV) against PNG crops of buttons and fields.
+- 🔤 **Bilingual OCR** (EasyOCR `en` + `es`, with Tesseract as an alternative) to read questions and options.
+- 🧠 **Local LLM** (Ollama, `gpt-oss:20b`) served through a Flask API that replies in JSON.
+- ⌨️🖱️ **Hardware input**: an Arduino (ATmega32U4) receives commands over serial and executes them as USB HID events.
+- 🎲 **Human timing**: log-normal/Gaussian delays, Bézier mouse paths and character-by-character typing.
+- 🗓️ **Event engine**: launches applications at random intervals, each in an isolated Python process with a timeout.
+- 📸 **Evidence**: saves a screenshot of every form right before submitting (`records/`) plus per-session logs (`logs/`).
 
 ---
 
-## 🧱 Arquitectura
+## 🧱 Architecture
 
 ```mermaid
 flowchart LR
     subgraph PC["🖥️ PC (Linux)"]
-        EE["🗓️ event_engine.py<br/>scheduler log-normal"]
-        LS["🧭 linked_scripts.py<br/>orquestador"]
-        VIS["👁️ Visión<br/>button_searcher · formulary_tools"]
+        EE["🗓️ event_engine.py<br/>log-normal scheduler"]
+        LS["🧭 linked_scripts.py<br/>orchestrator"]
+        VIS["👁️ Vision<br/>button_searcher · formulary_tools"]
         OCR["🔤 ocr_functs.py<br/>EasyOCR / Tesseract"]
         API["🌐 api_ollama.py<br/>Flask :5002"]
         MEI["🧠 ollama_mei_solver.py<br/>Ollama · gpt-oss:20b"]
@@ -60,65 +60,65 @@ flowchart LR
 
     EE -->|subprocess| LS
     LS -->|screenshot| VIS
-    VIS -->|recorte| OCR
-    OCR -->|pregunta| LS
+    VIS -->|crop| OCR
+    OCR -->|question| LS
     LS -->|POST /solve| API --> MEI
     MEI -->|JSON| LS
     LS --> ACT
     ACT -->|serial 9600 bps| ARD
-    ARD -->|USB HID teclado/mouse| SCREEN
+    ARD -->|USB HID keyboard/mouse| SCREEN
     SCREEN -.->|pyautogui.screenshot| VIS
 ```
 
-El ciclo es un **lazo cerrado percepción → decisión → acción**:
+It runs as a **closed perception → decision → action loop**:
 
 ```
  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
- │ 📸 Captura   │───▶│ 👁️ Detecta   │───▶│ 🧠 Decide    │───▶│ ⌨️ Actúa      │
- │  pantalla    │    │ botón/campo  │    │ (reglas/LLM) │    │ vía Arduino  │
+ │ 📸 Capture   │───▶│ 👁️ Detect    │───▶│ 🧠 Decide    │───▶│ ⌨️ Act        │
+ │  screen      │    │ button/field │    │ (rules/LLM)  │    │ via Arduino  │
  └──────────────┘    └──────────────┘    └──────────────┘    └──────┬───────┘
         ▲                                                            │
-        └──────────────────── la UI cambia ◀─────────────────────────┘
+        └──────────────────── UI changes ◀───────────────────────────┘
 ```
 
 ---
 
-## 🔄 Flujo de una postulación
+## 🔄 Application flow
 
-`main_filler_script()` en [linked_scripts.py](linked_scripts.py):
+`main_filler_script()` in [linked_scripts.py](linked_scripts.py):
 
 ```mermaid
 flowchart TD
-    A["🚀 Abrir terminal (Ctrl+Alt+T)<br/>y lanzar Chrome en /jobs/recommended"] --> B["📸 Captura → detectar el<br/>primer 'Easy Apply' de la lista"]
-    B --> C["🖱️ Click → captura → click en<br/>botón principal 'Easy Apply'"]
-    C --> D["⇥ TAB + 📸 captura"]
-    D --> E{"¿Qué hay en pantalla?"}
+    A["🚀 Open a terminal (Ctrl+Alt+T)<br/>and launch Chrome on /jobs/recommended"] --> B["📸 Capture → find the first<br/>'Easy Apply' job in the list"]
+    B --> C["🖱️ Click → capture → click the<br/>main 'Easy Apply' button"]
+    C --> D["⇥ TAB + 📸 capture"]
+    D --> E{"What's on screen?"}
     E -->|"🔵 Next / Review"| F["⏎ ENTER"] --> D
     E -->|"❓ 'Additional Questions'"| G["🧠 solve_AQ_formulary()"] --> D
-    E -->|"☑️ 'Follow company'"| H["␣ SPACE (desmarcar)"] --> D
-    E -->|"Nada"| D
-    E -->|"🟦 Submit application"| I["📸 Guardar evidencia en records/"]
-    I --> J["⏎ Enviar → cerrar diálogo"]
-    J --> K["❌ Cerrar pestaña y terminal"]
+    E -->|"☑️ 'Follow company'"| H["␣ SPACE (uncheck)"] --> D
+    E -->|"Nothing"| D
+    E -->|"🟦 Submit application"| I["📸 Save evidence to records/"]
+    I --> J["⏎ Submit → close dialog"]
+    J --> K["❌ Close tab and terminal"]
 ```
 
-### ❓ Preguntas adicionales
+### ❓ Additional questions
 
-Dentro de `solve_AQ_formulary()` cada campo enfocado se clasifica por el *widget* que lo acompaña:
+Inside `solve_AQ_formulary()`, each focused field is classified by the *widget* next to it:
 
-| Tipo | Widget detectado | Cómo se lee | Cómo se responde |
+| Type | Detected widget | How it's read | How it's answered |
 |:---:|---|---|---|
-| **1** 📝 | Campo de texto (`key_fill.png`) | OCR del texto encima del campo | Mei devuelve texto/número → se teclea en modo `HUMAN_LIVE` |
-| **2** 🔽 | Dropdown (`multi-select.png`) | Se recorren las opciones con ↓ y se hace OCR de cada una hasta que se repite 3 veces | Mei marca `true`/`false` por opción → se navega con ↑/↓ hasta la elegida |
-| **3** 🔘 | Radio button (`circle-select.png`) | OCR del texto junto al círculo | Mei responde booleano → ↓↑ = *Sí*, ↓ = *No* |
+| **1** 📝 | Text field (`key_fill.png`) | OCR of the text above the field | Mei returns text/a number → typed in `HUMAN_LIVE` mode |
+| **2** 🔽 | Dropdown (`multi-select.png`) | Walks the options with ↓, OCR-ing each one until the same one repeats 3 times | Mei marks each option `true`/`false` → navigates with ↑/↓ to the chosen one |
+| **3** 🔘 | Radio button (`circle-select.png`) | OCR of the text next to the circle | Mei returns a boolean → ↓↑ = *Yes*, ↓ = *No* |
 
 ```
  📸 formulary_state.png
         │
         ▼
- ┌────────────────────┐   tipo + coords   ┌───────────────────┐   texto    ┌──────────────┐
+ ┌────────────────────┐   type + coords   ┌───────────────────┐   text     ┌──────────────┐
  │ search_4_current_  │──────────────────▶│ crop_by_element() │──────────▶│ EasyOCR      │
- │ element()          │                   │ (recorte relativo)│           │ en + es      │
+ │ element()          │                   │ (relative crop)   │           │ en + es      │
  └────────────────────┘                   └───────────────────┘           └──────┬───────┘
                                                                                  │
      ┌──────────────────────┐   {"answer": ...}   ┌──────────────────┐  {"question","type"}
@@ -126,58 +126,58 @@ Dentro de `solve_AQ_formulary()` cada campo enfocado se clasifica por el *widget
      └──────────────────────┘                     └──────────────────┘
 ```
 
-Cuando ya no se detecta ningún campo, el bot avanza con TAB hasta encontrar el siguiente botón azul.
+Once no more fields are detected, the bot keeps pressing TAB until it finds the next blue button.
 
 ---
 
-## 🧩 Módulos
+## 🧩 Modules
 
-| Archivo | Rol |
+| File | Role |
 |---|---|
-| 🗓️ [event_engine.py](event_engine.py) | Scheduler: espera un tiempo log-normal (μ=2.71, σ=0.33 → ~15 min) entre eventos y ejecuta cada uno como subproceso con timeout. Duplica stdout a `logs/`. |
-| 🚪 [event_launcher.py](event_launcher.py) | Punto de entrada de un evento: llama a `main_filler_script()`. |
-| 🧭 [linked_scripts.py](linked_scripts.py) | Orquestador: flujo Easy Apply, preguntas adicionales, `script_add_contact()` para enviar invitaciones en *My Network*. |
-| 👁️ [button_searcher.py](button_searcher.py) | Template matching, selección del elemento más alto, ruido gaussiano en coordenadas y movimiento hacia el botón. |
-| 📋 [formulary_tools.py](formulary_tools.py) | Detección de widgets del formulario, botones azules (Next/Review/Submit), recortes y OCR de preguntas/opciones. |
-| 🔤 [ocr_functs.py](ocr_functs.py) | Wrappers de Tesseract (con preprocesado) y EasyOCR. |
-| 🎮 [formulary_actions.py](formulary_actions.py) | Clase `Actions`: TAB, ENTER, flechas, cambios de modo y tecleo humano por serial. |
-| 🖱️ [mouse_control.py](mouse_control.py) | Trayectorias Bézier, calibración, clicks con retardo, scroll y movimiento a zonas aleatorias. |
-| 🌐 [api_ollama.py](api_ollama.py) | API Flask `POST /solve` sobre el solver. |
-| 🧠 [ollama_mei_solver.py](ollama_mei_solver.py) | `CloudQuestionSolver`: prompt de sistema, reintentos y validación del JSON. |
-| 🔌 [ultimate_HID_1_5/](ultimate_HID_1_5/) | Sketch de Arduino (versión actual del firmware HID). |
-| 🧪 [test/event_sim.py](test/event_sim.py) | Simulador de la distribución de eventos (sin hardware). |
-| 🗃️ `formulary_st1.py`, `random_pos.py` | Versiones anteriores / utilidades sueltas. |
+| 🗓️ [event_engine.py](event_engine.py) | Scheduler: waits a log-normal interval (μ=2.71, σ=0.33 → ~15 min) between events and runs each one as a subprocess with a timeout. Tees stdout to `logs/`. |
+| 🚪 [event_launcher.py](event_launcher.py) | Entry point for a single event: calls `main_filler_script()`. |
+| 🧭 [linked_scripts.py](linked_scripts.py) | Orchestrator: Easy Apply flow, additional questions, and `script_add_contact()` to send invitations from *My Network*. |
+| 👁️ [button_searcher.py](button_searcher.py) | Template matching, picking the topmost match, Gaussian noise on coordinates and moving to the button. |
+| 📋 [formulary_tools.py](formulary_tools.py) | Detects form widgets and blue buttons (Next/Review/Submit), crops regions and OCRs questions/options. |
+| 🔤 [ocr_functs.py](ocr_functs.py) | Tesseract (with preprocessing) and EasyOCR wrappers. |
+| 🎮 [formulary_actions.py](formulary_actions.py) | `Actions` class: TAB, ENTER, arrows, mode switching and human-like typing over serial. |
+| 🖱️ [mouse_control.py](mouse_control.py) | Bézier paths, calibration, delayed clicks, scrolling and moves to random screen regions. |
+| 🌐 [api_ollama.py](api_ollama.py) | Flask API `POST /solve` on top of the solver. |
+| 🧠 [ollama_mei_solver.py](ollama_mei_solver.py) | `CloudQuestionSolver`: system prompt, retries and JSON validation. |
+| 🔌 [ultimate_HID_1_5/](ultimate_HID_1_5/) | Arduino sketch (current HID firmware). |
+| 🧪 [test/event_sim.py](test/event_sim.py) | Simulates the event distribution (no hardware needed). |
+| 🗃️ `formulary_st1.py`, `random_pos.py` | Earlier versions / standalone utilities. |
 
 ---
 
 ## 🔌 Hardware: Arduino HID
 
-Se necesita una placa con USB nativo (**ATmega32U4**: Arduino Leonardo, Micro o Pro Micro) para usar
-las librerías `Keyboard.h` y `Mouse.h`. Para el sistema operativo es un teclado y mouse físicos más.
+You need a board with native USB (**ATmega32U4**: Arduino Leonardo, Micro or Pro Micro) to use the
+`Keyboard.h` and `Mouse.h` libraries. To the operating system it looks like just another physical keyboard and mouse.
 
 ```
  ┌───────────────┐   USB serial (/dev/ttyACM*)   ┌─────────────────────┐   USB HID   ┌──────────┐
  │  Python       │──────────────────────────────▶│ Arduino 32U4        │────────────▶│  Linux   │
- │  pyserial     │   "TAB\n", "CLICK\n", ...     │ ultimate_HID_1_5    │  teclado +  │  + Chrome│
+ │  pyserial     │   "TAB\n", "CLICK\n", ...     │ ultimate_HID_1_5    │  keyboard + │  + Chrome│
  │               │◀──────────────────────────────│                     │  mouse      │          │
  └───────────────┘            "OK"               └─────────────────────┘             └──────────┘
 ```
 
-### Modos del firmware
+### Firmware modes
 
-| Modo | Comando | Comportamiento |
+| Mode | Command | Behavior |
 |---|---|---|
-| 🎯 `COMMAND` | `MODE:COMMAND` | Cada línea es un comando: `TAB`, `KEY_RETURN`, `SPACE`, `ESC`, `UP_ARROW`, `ctrl+w`, `X+`/`Y-`, `CLICK`, `SCROLL DOWN`, `PING`… Lo que no reconoce lo escribe tal cual. |
-| ✍️ `HUMAN` | `MODE:HUMAN` | Escribe la línea completa al recibir `\n`. |
-| ⚡ `HUMAN_LIVE` | `MODE:HUMAN_LIVE` | Escribe cada carácter en cuanto llega, así Python controla el ritmo del tecleo. |
-| 🤫 Sentinel `0x02` | `\x02MODE:...` | Suprime el eco hasta el `\n` para cambiar de modo sin escribir el comando en pantalla. |
-| 📤 `TYPE_ONLY:` | `TYPE_ONLY:texto` | Escribe el texto en cualquier modo. |
+| 🎯 `COMMAND` | `MODE:COMMAND` | Each line is a command: `TAB`, `KEY_RETURN`, `SPACE`, `ESC`, `UP_ARROW`, `ctrl+w`, `X+`/`Y-`, `CLICK`, `SCROLL DOWN`, `PING`… Anything it doesn't recognize gets typed as-is. |
+| ✍️ `HUMAN` | `MODE:HUMAN` | Types the whole line when it receives `\n`. |
+| ⚡ `HUMAN_LIVE` | `MODE:HUMAN_LIVE` | Types each character as soon as it arrives, so Python controls the typing rhythm. |
+| 🤫 Sentinel `0x02` | `\x02MODE:...` | Suppresses echo until `\n`, so you can switch modes without the command being typed on screen. |
+| 📤 `TYPE_ONLY:` | `TYPE_ONLY:text` | Types the text in any mode. |
 
-`ultimate_HID_1_2_ino` a `1_4` son versiones anteriores del mismo firmware.
+`ultimate_HID_1_2_ino` through `1_4` are earlier versions of the same firmware.
 
 ---
 
-## 🧠 Mei: el solver de preguntas
+## 🧠 Mei: the question solver
 
 ```
  POST http://localhost:5002/solve
@@ -193,115 +193,115 @@ las librerías `Keyboard.h` y `Mouse.h`. Para el sistema operativo es un teclado
  └──────────────────────────────────────────────┘        └──────────────────────────────┘
 ```
 
-- 🔁 Hasta 3 intentos si el modelo devuelve algo que no es JSON válido o responde `"Not specified"`.
-- 🔢 En preguntas de tipo 1 que mencionan *years*, se extrae solo el número.
-- 🧾 El **perfil del candidato vive en el prompt de sistema** de `CloudQuestionSolver`: edítalo para que refleje
-  tu experiencia real, ya que esas respuestas se envían a empleadores en tu nombre.
+- 🔁 Up to 3 attempts if the model returns invalid JSON or answers `"Not specified"`.
+- 🔢 For type 1 questions that mention *years*, only the number is kept.
+- 🧾 The **candidate profile lives in the system prompt** of `CloudQuestionSolver`: edit it to reflect
+  your real experience, since those answers are sent to employers on your behalf.
 
 ---
 
-## 🎲 Comportamiento humano
+## 🎲 Human-like behavior
 
-| Técnica | Dónde | Detalle |
+| Technique | Where | Details |
 |---|---|---|
-| ⏱️ Retardos log-normales / gaussianos | Todos los módulos | Pausas entre teclas, clicks y capturas con colas realistas y tope máximo. |
-| 〰️ Curvas de Bézier | `mouse_control.generate_trajectory` | El cursor sigue curvas con desviación aleatoria en lugar de líneas rectas. |
-| 🎯 Ruido en coordenadas | `button_searcher.noisy_coords` | El click cae cerca del centro del botón, nunca exactamente en el mismo píxel. |
-| ✍️ Tecleo carácter a carácter | `Actions.type_human` | Modo `HUMAN_LIVE` con retardo por carácter. |
-| 🗓️ Sesiones espaciadas | `event_engine` | Postulaciones separadas ~10–25 min con distribución log-normal. |
-| 🧭 Mouse a zonas aleatorias | `go_to_random_margin_position` | Aparta el cursor tras hacer click para no tapar la UI. |
+| ⏱️ Log-normal / Gaussian delays | Every module | Pauses between keystrokes, clicks and screenshots, with realistic tails and a hard cap. |
+| 〰️ Bézier curves | `mouse_control.generate_trajectory` | The cursor follows curves with random deviation instead of straight lines. |
+| 🎯 Coordinate noise | `button_searcher.noisy_coords` | Clicks land near the button's center, never on the exact same pixel. |
+| ✍️ Character-by-character typing | `Actions.type_human` | `HUMAN_LIVE` mode with a per-character delay. |
+| 🗓️ Spaced-out sessions | `event_engine` | Applications ~10–25 min apart, log-normally distributed. |
+| 🧭 Mouse to random regions | `go_to_random_margin_position` | Moves the cursor away after clicking so it doesn't cover the UI. |
 
 ---
 
-## 🛠️ Instalación
+## 🛠️ Installation
 
-### Requisitos
+### Requirements
 
-- 🐧 Linux con X11 (usa `pyautogui`, `xdotool` y `Ctrl+Alt+T` para abrir la terminal; probado en Ubuntu/GNOME).
+- 🐧 Linux with X11 (uses `pyautogui`, `xdotool` and `Ctrl+Alt+T` to open a terminal; tested on Ubuntu/GNOME).
 - 🐍 Python 3.10+
-- 🌐 Google Chrome con la sesión de LinkedIn ya iniciada.
-- 🦙 [Ollama](https://ollama.com/) con el modelo descargado.
+- 🌐 Google Chrome, already logged in to LinkedIn.
+- 🦙 [Ollama](https://ollama.com/) with the model pulled.
 - 🔌 Arduino Leonardo / Micro / Pro Micro.
-- 🔤 Tesseract (opcional, solo para `get_text`).
+- 🔤 Tesseract (optional, only for `get_text`).
 
-### Pasos
+### Steps
 
 ```bash
-# 1. Dependencias de Python
+# 1. Python dependencies
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r reqs/requirements_witheasyocr.txt
-pip install ollama          # cliente usado por ollama_mei_solver.py
+pip install ollama          # client used by ollama_mei_solver.py
 
-# 2. Dependencias del sistema
+# 2. System dependencies
 sudo apt install xdotool tesseract-ocr tesseract-ocr-spa
 
-# 3. Modelo local
+# 3. Local model
 ollama pull gpt-oss:20b
 
-# 4. Firmware: abre ultimate_HID_1_5/ultimate_HID_1_5.ino en Arduino IDE y súbelo a la placa
+# 4. Firmware: open ultimate_HID_1_5/ultimate_HID_1_5.ino in the Arduino IDE and upload it to the board
 
-# 5. Permisos del puerto serial
-sudo usermod -aG dialout $USER   # cierra sesión y vuelve a entrar
-ls /dev/ttyACM*                  # identifica el puerto del Arduino
+# 5. Serial port permissions
+sudo usermod -aG dialout $USER   # log out and back in
+ls /dev/ttyACM*                  # find the Arduino's port
 ```
 
-### ⚙️ Configuración
+### ⚙️ Configuration
 
-| Qué | Dónde |
+| What | Where |
 |---|---|
-| Puerto del Arduino (`/dev/ttyACM2` por defecto) | `ARDUINO_PORT` en `linked_scripts.py`, `formulary_actions.py` y `mouse_control.py` |
-| Comando para abrir Chrome / perfil | `main_filler_script()` y `script_add_contact()` en `linked_scripts.py` |
-| Número de postulaciones y espaciado | `__main__` de `event_engine.py` (`total_events`, `mu`, `sigma`, `timeout_minutes`) |
-| Modelo LLM | `CloudQuestionSolver(model=...)` |
-| Plantillas visuales | `assets/*.png` (recórtalas de nuevo si cambia tu resolución, tema o idioma de LinkedIn) |
+| Arduino port (`/dev/ttyACM2` by default) | `ARDUINO_PORT` in `linked_scripts.py`, `formulary_actions.py` and `mouse_control.py` |
+| Command that opens Chrome / profile | `main_filler_script()` and `script_add_contact()` in `linked_scripts.py` |
+| Number of applications and spacing | `__main__` in `event_engine.py` (`total_events`, `mu`, `sigma`, `timeout_minutes`) |
+| LLM model | `CloudQuestionSolver(model=...)` |
+| Visual templates | `assets/*.png` (re-crop them if your resolution, theme or LinkedIn language changes) |
 
 ---
 
-## 🚀 Uso
+## 🚀 Usage
 
 ```bash
-# Terminal 1 — API del LLM
+# Terminal 1: LLM API
 python api_ollama.py
 
-# Terminal 2 — una sola postulación
+# Terminal 2: a single application
 python event_launcher.py
 
-# …o una sesión de N postulaciones espaciadas
+# …or a session of N spaced-out applications
 python event_engine.py
 ```
 
-> 💡 No toques el teclado ni el mouse mientras corre: el Arduino escribe en la ventana que tenga el foco.
+> 💡 Don't touch the keyboard or mouse while it runs: the Arduino types into whichever window has focus.
 
 ---
 
-## 📁 Estructura del repo
+## 📁 Repo layout
 
 ```
 LinkedinBot/
-├── 🗓️ event_engine.py          # scheduler de sesiones
-├── 🚪 event_launcher.py        # entrada de un evento
-├── 🧭 linked_scripts.py        # orquestador
-├── 👁️ button_searcher.py       # template matching + movimiento
-├── 📋 formulary_tools.py       # detección y OCR del formulario
+├── 🗓️ event_engine.py          # session scheduler
+├── 🚪 event_launcher.py        # single-event entry point
+├── 🧭 linked_scripts.py        # orchestrator
+├── 👁️ button_searcher.py       # template matching + movement
+├── 📋 formulary_tools.py       # form detection and OCR
 ├── 🔤 ocr_functs.py
-├── 🎮 formulary_actions.py     # acciones por serial
-├── 🖱️ mouse_control.py         # trayectorias del mouse
+├── 🎮 formulary_actions.py     # serial actions
+├── 🖱️ mouse_control.py         # mouse trajectories
 ├── 🌐 api_ollama.py            # Flask :5002
-├── 🧠 ollama_mei_solver.py     # solver LLM
-├── 🖼️ assets/                  # plantillas PNG de botones/campos
-├── 🔌 ultimate_HID_1_5/        # firmware Arduino
+├── 🧠 ollama_mei_solver.py     # LLM solver
+├── 🖼️ assets/                  # PNG templates of buttons/fields
+├── 🔌 ultimate_HID_1_5/        # Arduino firmware
 ├── 🧪 test/
 ├── 📦 reqs/
-├── 📸 records/                 # (ignorado) capturas antes de enviar
-└── 📜 logs/                    # (ignorado) logs por sesión
+├── 📸 records/                 # (ignored) screenshots taken before submitting
+└── 📜 logs/                    # (ignored) per-session logs
 ```
 
 ---
 
-## 🚧 Limitaciones y TODO
+## 🚧 Limitations and TODO
 
-- 📐 Las plantillas y offsets de recorte dependen de la **resolución, escala y tema**; en otra pantalla hay que recortarlas de nuevo.
-- 🔁 La navegación es por TAB + captura, así que cada formulario tarda varios minutos.
-- 🧪 No hay validación de la respuesta antes de teclearla (p. ej. rangos numéricos de LinkedIn).
-- ⚙️ Pendiente: centralizar la configuración (puerto, perfil, rutas) en un `.env` / `config.yaml`.
-- 🧹 Pendiente: limpiar funciones de prueba (`q*_type_action_test`, `main_script_old`) y módulos legacy.
+- 📐 Templates and crop offsets depend on **resolution, scaling and theme**; on a different screen you'll need to re-crop them.
+- 🔁 Navigation is TAB + screenshot, so each form takes several minutes.
+- 🧪 Answers aren't validated before typing (e.g. LinkedIn's numeric ranges).
+- ⚙️ TODO: centralize configuration (port, profile, paths) in a `.env` / `config.yaml`.
+- 🧹 TODO: clean up test functions (`q*_type_action_test`, `main_script_old`) and legacy modules.
