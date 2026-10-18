@@ -1,0 +1,36 @@
+# Carpetas de caché de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Archivos temporales de entorno
+.env
+.venv
+env/
+venv/
+records/
+logs/
+
+# Capturas de pantalla generadas en ejecución (contienen datos personales)
+debug_*.png
+question_crop.png
+assets/1st_*.png
+assets/detected*.png
+assets/debug*.png
+assets/button_view.png
+assets/next_view.png
+assets/formulary_state.png
+assets/q_text_*.png
+assets/test/
+
+# Archivos de configuración de IDEs
+.vscode/
+.idea/
+
+# Archivos de logs
+*.log
+
+# Archivos de compilación / dist
+build/
+dist/
+*.egg-info/
